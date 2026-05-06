@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminPanel'>;
 
-const TOMTOM_API_KEY = 'YOUR_TOMTOM_API_KEY'; // Replace with actual key
+const TOMTOM_API_KEY = 'apy4IVOT24PyWLcNEKSpoiMc9DKfU5Rn';
 
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
   try {
