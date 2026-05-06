@@ -107,7 +107,7 @@ export function DonorHomeScreen({ navigation }: Props) {
         <View style={styles.headerLeft}>
           <BNLogoMark size={32} />
           <View>
-            <Text style={styles.greeting}>Good morning,</Text>
+            <Text style={styles.greeting}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,'; })()}</Text>
             <Text style={styles.name}>{firstName}</Text>
           </View>
         </View>
@@ -127,14 +127,16 @@ export function DonorHomeScreen({ navigation }: Props) {
         </View>
       )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterContent}>
-        {[['Type', donorProfile?.blood_group ?? '—'], ['Within', '10 km'], ['Last donated', donorProfile?.last_donation_date ? '90+ days' : 'First time']].map(([k, v]) => (
-          <View key={k} style={styles.chip}>
-            <Text style={styles.chipKey}>{k} </Text>
-            <Text style={styles.chipVal}>{v}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={styles.filterRow}>
+        <View style={styles.filterContent}>
+          {[['Type', donorProfile?.blood_group ?? '—'], ['Last donated', donorProfile?.last_donation_date ? '90+ days' : 'First time']].map(([k, v]) => (
+            <View key={k} style={styles.chip}>
+              <Text style={styles.chipKey}>{k} </Text>
+              <Text style={styles.chipVal}>{v}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
 
       {loading ? (
         <View style={styles.loadingBox}>
@@ -231,9 +233,9 @@ const styles = StyleSheet.create({
   bellDot: { position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: BN.crimson, borderWidth: 1.5, borderColor: BN.burgundy },
   eligibleStrip: { backgroundColor: BN.success, paddingHorizontal: 20, paddingVertical: 8 },
   eligibleText: { fontFamily: BN.uiSemiBold, fontSize: 13, color: '#fff' },
-  filterRow: { backgroundColor: BN.white, borderBottomWidth: 0.5, borderBottomColor: BN.divider },
-  filterContent: { padding: 12, paddingHorizontal: 20, gap: 6, flexDirection: 'row' },
-  chip: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: BN.bg, borderRadius: 100, borderWidth: 0.5, borderColor: BN.divider, flexDirection: 'row' },
+  filterRow: { backgroundColor: BN.white, borderBottomWidth: 0.5, borderBottomColor: BN.divider, height: 46, overflow: 'hidden' },
+  filterContent: { flex: 1, paddingHorizontal: 20, gap: 6, flexDirection: 'row', alignItems: 'center' },
+  chip: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: BN.bg, borderRadius: 100, borderWidth: 0.5, borderColor: BN.divider, flexDirection: 'row', alignItems: 'center', alignSelf: 'center' },
   chipKey: { fontFamily: BN.ui, fontSize: 12, color: BN.muted },
   chipVal: { fontFamily: BN.uiBold, fontSize: 12, color: BN.text },
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },

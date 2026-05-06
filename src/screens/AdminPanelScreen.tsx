@@ -11,6 +11,22 @@ import { useAuth } from '../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminPanel'>;
 
+const TOMTOM_API_KEY = 'YOUR_TOMTOM_API_KEY'; // Replace with actual key
+
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const encoded = encodeURIComponent(address);
+    const url = `https://api.tomtom.com/search/2/geocode/${encoded}.json?key=${TOMTOM_API_KEY}&limit=1`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const pos = json?.results?.[0]?.position;
+    if (pos) return { lat: pos.lat, lng: pos.lon };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function generatePassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!';
   return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -27,6 +43,7 @@ export function AdminPanelScreen({ navigation }: Props) {
   const [hospName, setHospName] = useState('');
   const [hospUsername, setHospUsername] = useState('');
   const [hospPassword, setHospPassword] = useState('');
+  const [hospAddress, setHospAddress] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -64,7 +81,16 @@ export function AdminPanelScreen({ navigation }: Props) {
       }
       Alert.alert('Success', `Hospital "${hospName}" created.\nUsername: ${hospUsername}\nPassword: ${hospPassword}`);
       setShowCreate(false);
-      setHospName(''); setHospUsername(''); setHospPassword('');
+      const userId = data.user!.id;
+      if (hospAddress.trim()) {
+        const coords = await geocodeAddress(hospAddress.trim());
+        await supabase.from('hospital_profiles').update({
+          address: hospAddress.trim(),
+          latitude: coords?.lat ?? null,
+          longitude: coords?.lng ?? null,
+        }).eq('id', userId);
+      }
+      setHospName(''); setHospUsername(''); setHospPassword(''); setHospAddress('');
       fetchHospitals();
     } finally {
       setCreating(false);
@@ -137,6 +163,7 @@ export function AdminPanelScreen({ navigation }: Props) {
               {formError ? <Text style={styles.formError}>{formError}</Text> : null}
               <BNInput label="Hospital Name" value={hospName} onChangeText={setHospName} placeholder="City General Hospital" />
               <BNInput label="Username" value={hospUsername} onChangeText={setHospUsername} placeholder="citygeneral" />
+              <BNInput label="Hospital Address" value={hospAddress} onChangeText={setHospAddress} placeholder="123 Main St, City, State" />
               <BNInput
                 label="Password"
                 value={hospPassword}

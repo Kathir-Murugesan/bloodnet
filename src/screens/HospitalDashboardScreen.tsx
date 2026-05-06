@@ -75,14 +75,15 @@ export function HospitalDashboardScreen({ navigation }: Props) {
   useEffect(() => {
     if (!session) return;
     const channel = supabase
-      .channel('hospital-dashboard')
+      .channel('hospital-dashboard-' + session.user.id)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'blood_requests',
         filter: `hospital_id=eq.${session.user.id}`,
       }, fetchData)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [session, fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   const hospitalName = hospitalProfile?.hospital_name ?? 'Hospital';
   const abbr = hospitalName.split(' ').map((w: string) => w[0]).join('').slice(0, 3).toUpperCase();

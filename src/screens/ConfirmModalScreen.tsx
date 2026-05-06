@@ -59,6 +59,20 @@ export function ConfirmModalScreen({ navigation, route }: Props) {
       }
 
       if (data) {
+        // Check if this commitment fills the last unit needed
+        const { count } = await supabase
+          .from('request_commitments')
+          .select('id', { count: 'exact' })
+          .eq('request_id', requestId)
+          .eq('status', 'committed');
+
+        if ((count ?? 0) >= request.units_needed) {
+          await supabase
+            .from('blood_requests')
+            .update({ status: 'fulfilled' })
+            .eq('id', requestId);
+        }
+
         if (request.urgency === 'urgent') {
           await startLocationTracking(data.id);
           navigation.pop();
@@ -99,9 +113,14 @@ export function ConfirmModalScreen({ navigation, route }: Props) {
         <Text style={styles.title}>Confirm Your Commitment</Text>
         <Text style={styles.body}>
           By accepting, you are committing to donate{' '}
-          <Text style={styles.bold}>{request.units_needed} unit{request.units_needed > 1 ? 's' : ''} of {request.blood_group}</Text>{' '}
+          <Text style={styles.bold}>1 unit of {request.blood_group}</Text>{' '}
           at <Text style={styles.bold}>{request.hospital?.hospital_name ?? 'the hospital'}</Text>.
         </Text>
+        {request.units_needed > 1 && (
+          <Text style={styles.donorsNote}>
+            {request.units_needed} donors needed total for this request.
+          </Text>
+        )}
         <View style={styles.locationWarning}>
           <Text style={styles.locationText}>
             {request.urgency === 'urgent'
@@ -132,4 +151,5 @@ const styles = StyleSheet.create({
   actions: { width: '100%', gap: 8 },
   goBack: { padding: 8, alignItems: 'center' },
   goBackText: { fontFamily: BN.ui, fontSize: 14, color: BN.muted },
+  donorsNote: { fontFamily: BN.ui, fontSize: 12, color: BN.muted, textAlign: 'center', marginBottom: 8 },
 });

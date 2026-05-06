@@ -37,9 +37,9 @@ export function ManageRequestsScreen({ navigation }: Props) {
       .order('created_at', { ascending: false });
 
     if (filter === 'Closed') {
-      query = query.eq('status', 'closed') as typeof query;
+      query = query.eq('status', 'fulfilled') as typeof query;
     } else if (filter === 'All') {
-      query = query.in('status', ['active', 'closed']) as typeof query;
+      query = query.in('status', ['active', 'fulfilled']) as typeof query;
     } else {
       query = query.eq('status', 'active').eq('urgency', filter.toLowerCase()) as typeof query;
     }
@@ -72,7 +72,7 @@ export function ManageRequestsScreen({ navigation }: Props) {
         style: 'destructive',
         onPress: async () => {
           setClosing(requestId);
-          await supabase.from('blood_requests').update({ status: 'closed' }).eq('id', requestId);
+          await supabase.from('blood_requests').update({ status: 'fulfilled' }).eq('id', requestId);
           setClosing(null);
           fetchRequests();
         },
@@ -119,7 +119,7 @@ export function ManageRequestsScreen({ navigation }: Props) {
                     ? (r.urgency === 'urgent'
                       ? <BNTag color={BN.crimson} dot>Urgent</BNTag>
                       : <BNTag color={BN.info}>Scheduled</BNTag>)
-                    : <BNTag color={BN.muted}>Closed</BNTag>
+                    : <BNTag color={BN.muted}>Fulfilled</BNTag>
                   }
                 </View>
                 <Text style={styles.postedTime}>{timeAgo(r.created_at)}</Text>
