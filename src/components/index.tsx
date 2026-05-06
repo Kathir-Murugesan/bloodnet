@@ -11,6 +11,7 @@ import {
   PlusCircleIcon, ClipboardIcon, HospitalIcon, CalendarIcon, HomeIcon, UserIcon,
   BellIcon, GridIcon,
 } from '../icons';
+import { TomTomMap } from './TomTomMap';
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 const logoSrc = require('../../assets/bloodnet-logo.png');
@@ -347,8 +348,35 @@ interface BNMapProps {
   showHospital?: boolean;
   showSelf?: boolean;
   label?: string;
+  // New: real coordinates
+  hospitalLat?: number;
+  hospitalLng?: number;
+  donorLat?: number;
+  donorLng?: number;
 }
-export function BNMap({ height = 180, donors = 0, dark = false, showHospital = true, showSelf = false, label }: BNMapProps) {
+export function BNMap({ height = 180, donors = 0, dark = false, showHospital = true, showSelf = false, label, hospitalLat, hospitalLng, donorLat, donorLng }: BNMapProps) {
+  if (hospitalLat && hospitalLng) {
+    return (
+      <View style={{ borderRadius: 12, overflow: 'hidden' }}>
+        <TomTomMap
+          height={height}
+          centerLat={hospitalLat}
+          centerLng={hospitalLng}
+          hospitalLat={hospitalLat}
+          hospitalLng={hospitalLng}
+          donorLat={donorLat}
+          donorLng={donorLng}
+          showRoute={!!(donorLat && donorLng)}
+        />
+        {label ? (
+          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', padding: 6 }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontFamily: BN.uiSemiBold, textAlign: 'center' }}>{label}</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   const bg = dark ? '#2a0a18' : '#EDE0E5';
   const strokeColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(90,0,32,0.07)';
   const water = dark ? '#1f0612' : '#DCC8CF';

@@ -102,7 +102,16 @@ export function RequestDetailScreen({ navigation, route }: Props) {
           </View>
         </BNCard>
 
-        <BNMap height={150} showHospital showSelf label={distKm != null ? `You are ${formatDistance(distKm)} from this hospital` : 'Hospital location'} />
+        <BNMap
+          height={150}
+          showHospital
+          showSelf
+          label={distKm != null ? `You are ${formatDistance(distKm)} from this hospital` : 'Hospital location'}
+          hospitalLat={request.hospital?.latitude ?? undefined}
+          hospitalLng={request.hospital?.longitude ?? undefined}
+          donorLat={donorProfile?.latitude ?? undefined}
+          donorLng={donorProfile?.longitude ?? undefined}
+        />
 
         {request.notes ? (
           <View>

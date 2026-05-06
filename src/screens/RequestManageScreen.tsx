@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
@@ -8,6 +8,7 @@ import { BNBloodBadge, BNTag, BNMap, BNAvatar, PulseDot } from '../components';
 import { BackIcon } from '../icons';
 import { supabase, BloodRequest, RequestCommitment, DonorProfile } from '../lib/supabase';
 import { formatDistance, haversineKm, timeAgo } from '../lib/distance';
+import { TOMTOM_API_KEY } from '../lib/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestManage'>;
 
@@ -21,6 +22,54 @@ export function RequestManageScreen({ navigation, route }: Props) {
   const [request, setRequest] = useState<BloodRequest | null>(null);
   const [commitments, setCommitments] = useState<CommitmentWithDonor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [routeMap, setRouteMap] = useState<Record<string, { distKm: string; etaMins: number }>>({});
+  const [marking, setMarking] = useState<string | null>(null);
+
+  async function fetchRoutes(commits: CommitmentWithDonor[], hospitalLat: number, hospitalLng: number) {
+    const results: Record<string, { distKm: string; etaMins: number }> = {};
+    await Promise.all(
+      commits
+        .filter((c) => c.current_latitude != null && c.current_longitude != null)
+        .map(async (c) => {
+          try {
+            const url = `https://api.tomtom.com/routing/1/calculateRoute/${c.current_latitude},${c.current_longitude}:${hospitalLat},${hospitalLng}/json?key=${TOMTOM_API_KEY}&travelMode=car&routeType=fastest`;
+            const res = await fetch(url);
+            const json = await res.json();
+            const summary = json?.routes?.[0]?.summary;
+            if (summary) {
+              results[c.id] = {
+                distKm: (summary.lengthInMeters / 1000).toFixed(1),
+                etaMins: Math.round(summary.travelTimeInSeconds / 60),
+              };
+            }
+          } catch { /* ignore individual failures */ }
+        })
+    );
+    setRouteMap(results);
+  }
+
+  async function handleMarkDonated(commitmentId: string, donorId: string) {
+    Alert.alert(
+      'Confirm Donation',
+      'Confirm that this donor physically donated blood today?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setMarking(commitmentId);
+            const today = new Date().toISOString().split('T')[0];
+            await Promise.all([
+              supabase.from('donor_profiles').update({ last_donation_date: today }).eq('id', donorId),
+              supabase.from('request_commitments').update({ status: 'completed' }).eq('id', commitmentId),
+            ]);
+            setMarking(null);
+            fetchData();
+          },
+        },
+      ]
+    );
+  }
 
   const fetchData = useCallback(async () => {
     const [{ data: req }, { data: commits }] = await Promise.all([
@@ -38,7 +87,14 @@ export function RequestManageScreen({ navigation, route }: Props) {
     ]);
 
     if (req) setRequest(req);
-    if (commits) setCommitments(commits as CommitmentWithDonor[]);
+    if (commits) {
+      const typedCommits = commits as CommitmentWithDonor[];
+      setCommitments(typedCommits);
+      const hospital = (req as any)?.hospital;
+      if (hospital?.latitude && hospital?.longitude) {
+        fetchRoutes(typedCommits, hospital.latitude, hospital.longitude);
+      }
+    }
     setLoading(false);
   }, [requestId]);
 
@@ -107,7 +163,13 @@ export function RequestManageScreen({ navigation, route }: Props) {
         </View>
 
         {/* Map showing donors */}
-        <BNMap height={160} showHospital label={`${hospital?.hospital_name ?? 'Hospital'} · Live donor tracking`} />
+        <BNMap
+          height={160}
+          showHospital
+          label={`${hospital?.hospital_name ?? 'Hospital'} · Live donor tracking`}
+          hospitalLat={hospital?.latitude ?? undefined}
+          hospitalLng={hospital?.longitude ?? undefined}
+        />
 
         {/* Committed donors */}
         <Text style={styles.sectionLabel}>COMMITTED DONORS</Text>
@@ -123,9 +185,6 @@ export function RequestManageScreen({ navigation, route }: Props) {
               ? c.donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
               : '?';
             const hasLocation = c.current_latitude != null && c.current_longitude != null;
-            const distKm = (hasLocation && hospital?.latitude && hospital?.longitude)
-              ? haversineKm(c.current_latitude!, c.current_longitude!, hospital.latitude, hospital.longitude)
-              : null;
             const isLive = hasLocation && c.location_updated_at
               ? (Date.now() - new Date(c.location_updated_at).getTime()) < 5 * 60 * 1000
               : false;
@@ -146,12 +205,28 @@ export function RequestManageScreen({ navigation, route }: Props) {
                   <Text style={styles.donorMeta}>
                     {c.donor?.blood_group} · Committed {timeAgo(c.committed_at)}
                   </Text>
-                  {distKm != null && (
-                    <Text style={styles.donorDist}>{formatDistance(distKm)} from hospital</Text>
-                  )}
-                  {!hasLocation && (
+                  {hasLocation ? (
+                    <>
+                      <Text style={styles.donorDist}>
+                        {routeMap[c.id]?.distKm ? routeMap[c.id].distKm + ' km by road' : 'Locating…'}
+                      </Text>
+                      {routeMap[c.id]?.etaMins ? (
+                        <Text style={styles.donorDist}>{'~' + routeMap[c.id].etaMins + ' min away'}</Text>
+                      ) : null}
+                    </>
+                  ) : (
                     <Text style={styles.donorDist}>Location not shared yet</Text>
                   )}
+                  <TouchableOpacity
+                    style={[styles.markBtn, marking === c.id && { opacity: 0.5 }]}
+                    onPress={() => handleMarkDonated(c.id, c.donor.id)}
+                    disabled={marking === c.id}
+                  >
+                    {marking === c.id
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.markBtnText}>✓ Mark Donated</Text>
+                    }
+                  </TouchableOpacity>
                 </View>
                 {c.donor?.phone ? (
                   <View style={styles.phoneBadge}>
@@ -213,4 +288,9 @@ const styles = StyleSheet.create({
     backgroundColor: BN.bg, borderRadius: 8, borderWidth: 0.5, borderColor: BN.divider,
   },
   phoneText: { fontFamily: 'monospace', fontSize: 11, color: BN.text },
+  markBtn: {
+    marginTop: 10, paddingVertical: 8, paddingHorizontal: 14,
+    backgroundColor: BN.success, borderRadius: 8, alignItems: 'center',
+  },
+  markBtnText: { fontFamily: BN.uiBold, fontSize: 13, color: '#fff' },
 });

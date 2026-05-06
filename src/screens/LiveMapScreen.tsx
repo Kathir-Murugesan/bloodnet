@@ -6,7 +6,8 @@ import * as Location from 'expo-location';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { BN, shadow } from '../theme';
-import { BNMap, BNAvatar, BNBloodBadge, PulseDot } from '../components';
+import { BNAvatar, BNBloodBadge, PulseDot } from '../components';
+import { TomTomMap } from '../components/TomTomMap';
 import { supabase, RequestCommitment } from '../lib/supabase';
 import { stopLocationTracking } from '../lib/locationTask';
 
@@ -17,6 +18,9 @@ export function LiveMapScreen({ navigation, route }: Props) {
   const { commitmentId } = route.params;
   const [commitment, setCommitment] = useState<RequestCommitment | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distKm: string; etaMins: number } | null>(null);
+  const [donorLat, setDonorLat] = useState<number | null>(null);
+  const [donorLng, setDonorLng] = useState<number | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const updateTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingLocation = useRef<{ lat: number; lng: number } | null>(null);
@@ -44,6 +48,8 @@ export function LiveMapScreen({ navigation, route }: Props) {
         (loc) => {
           if (!active) return;
           pendingLocation.current = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          setDonorLat(loc.coords.latitude);
+          setDonorLng(loc.coords.longitude);
         }
       );
 
@@ -81,6 +87,8 @@ export function LiveMapScreen({ navigation, route }: Props) {
 
   const req = (commitment as any)?.request;
   const hospital = req?.hospital;
+  const hospitalLat: number | undefined = hospital?.latitude;
+  const hospitalLng: number | undefined = hospital?.longitude;
   const donor = commitment?.donor;
   const initials = donor?.full_name
     ? donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -90,7 +98,18 @@ export function LiveMapScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <StatusBar style="light" />
       {/* Full-screen map */}
-      <BNMap height={812} showHospital showSelf />
+      <TomTomMap
+        height={812}
+        centerLat={donorLat ?? hospitalLat ?? 19.076}
+        centerLng={donorLng ?? hospitalLng ?? 72.877}
+        hospitalLat={hospitalLat}
+        hospitalLng={hospitalLng}
+        hospitalName={hospital?.hospital_name}
+        donorLat={donorLat ?? undefined}
+        donorLng={donorLng ?? undefined}
+        showRoute={!!(donorLat && donorLng && hospitalLat && hospitalLng)}
+        onRouteInfo={setRouteInfo}
+      />
 
       {/* Top info card */}
       <View style={[styles.topCard, { top: insets.top + 8 }]}>
@@ -106,13 +125,15 @@ export function LiveMapScreen({ navigation, route }: Props) {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Blood Group</Text>
-            <Text style={styles.statValue}>{req?.blood_group ?? '—'}</Text>
+            <Text style={styles.statLabel}>Distance</Text>
+            <Text style={styles.statValue}>
+              {routeInfo?.distKm ? routeInfo.distKm + ' km' : '—'}
+            </Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Updated</Text>
+            <Text style={styles.statLabel}>ETA</Text>
             <Text style={styles.statValue}>
-              {lastUpdated ? 'Just now' : 'Waiting…'}
+              {routeInfo?.etaMins ? routeInfo.etaMins + ' min' : 'Locating…'}
             </Text>
           </View>
         </View>
