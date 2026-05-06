@@ -1,22 +1,70 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { BN } from '../theme';
-import { BNBloodBadge, BNTag, BNAvatar, BNMap, PulseDot } from '../components';
-import { BackIcon, ShareIcon, ChevronIcon } from '../icons';
+import { BNBloodBadge, BNTag, BNMap, BNAvatar, PulseDot } from '../components';
+import { BackIcon } from '../icons';
+import { supabase, BloodRequest, RequestCommitment, DonorProfile } from '../lib/supabase';
+import { formatDistance, haversineKm, timeAgo } from '../lib/distance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestManage'>;
 
-const donors = [
-  { n: 'Rajan M.',  i: 'RM', d: '2.1 km', eta: '8 min',  live: true,  time: '2 min ago' },
-  { n: 'Priya K.',  i: 'PK', d: '3.4 km', eta: '12 min', live: true,  time: '5 min ago' },
-  { n: 'Sneha S.',  i: 'SS', d: '5.8 km', eta: '18 min', live: false, time: '14 min ago' },
-];
+interface CommitmentWithDonor extends RequestCommitment {
+  donor: DonorProfile;
+}
 
-export function RequestManageScreen({ navigation }: Props) {
+export function RequestManageScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { requestId } = route.params;
+  const [request, setRequest] = useState<BloodRequest | null>(null);
+  const [commitments, setCommitments] = useState<CommitmentWithDonor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    const [{ data: req }, { data: commits }] = await Promise.all([
+      supabase
+        .from('blood_requests')
+        .select('*, hospital:hospital_profiles(*)')
+        .eq('id', requestId)
+        .single(),
+      supabase
+        .from('request_commitments')
+        .select('*, donor:donor_profiles(*)')
+        .eq('request_id', requestId)
+        .eq('status', 'committed')
+        .order('committed_at', { ascending: true }),
+    ]);
+
+    if (req) setRequest(req);
+    if (commits) setCommitments(commits as CommitmentWithDonor[]);
+    setLoading(false);
+  }, [requestId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Real-time updates for donor locations
+  useEffect(() => {
+    const channel = supabase
+      .channel(`request-manage-${requestId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'request_commitments',
+        filter: `request_id=eq.${requestId}`,
+      }, fetchData)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [requestId, fetchData]);
+
+  if (loading || !request) {
+    return (
+      <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
+        <ActivityIndicator color={BN.crimson} />
+      </View>
+    );
+  }
+
+  const hospital = (request as any).hospital;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -24,111 +72,145 @@ export function RequestManageScreen({ navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <BackIcon color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>O+ · Urgent</Text>
-        <ShareIcon color="#fff" size={18} />
+        <Text style={styles.headerTitle}>
+          {request.blood_group} · {request.urgency === 'urgent' ? 'Urgent' : 'Scheduled'}
+        </Text>
+        <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Summary */}
+      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+        {/* Summary card */}
         <View style={styles.summaryCard}>
-          <View style={styles.summaryTop}>
-            <BNTag color={BN.crimson} dot>Urgent</BNTag>
-            <Text style={styles.postedTime}>Posted 12 min ago</Text>
+          <View style={styles.summaryRow}>
+            <BNBloodBadge group={request.blood_group} size="lg" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryTitle}>{request.units_needed} unit{request.units_needed > 1 ? 's' : ''} needed</Text>
+              <Text style={styles.summaryMuted}>
+                {request.urgency === 'urgent' ? 'Urgent request' :
+                  request.scheduled_at
+                    ? new Date(request.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                    : 'Scheduled'}
+              </Text>
+            </View>
+            {request.urgency === 'urgent'
+              ? <BNTag color={BN.crimson} dot>Urgent</BNTag>
+              : <BNTag color={BN.info}>Scheduled</BNTag>
+            }
           </View>
-          <View style={styles.summaryStats}>
-            <BNBloodBadge group="O+" size="lg" />
-            <View>
-              <Text style={styles.unitsText}>2 / 2</Text>
-              <Text style={styles.unitsLabel}>Units secured</Text>
+          <View style={styles.committedCountRow}>
+            <View style={[styles.countBadge, commitments.length === 0 && { backgroundColor: 'rgba(196,122,0,0.12)' }]}>
+              <Text style={[styles.countText, commitments.length === 0 && { color: BN.warn }]}>
+                {commitments.length} / {request.units_needed} committed
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Live map */}
-        <View style={styles.mapCard}>
-          <View style={styles.mapHeader}>
-            <View style={styles.liveRow}>
-              <PulseDot color={BN.success} size={8} />
-              <Text style={styles.liveText}>LIVE TRACKING</Text>
-            </View>
-            <Text style={styles.updatedText}>Updated just now</Text>
-          </View>
-          <BNMap height={180} dark donors={3} showHospital />
-        </View>
+        {/* Map showing donors */}
+        <BNMap height={160} showHospital label={`${hospital?.hospital_name ?? 'Hospital'} · Live donor tracking`} />
 
-        {/* Donors list */}
-        <Text style={styles.donorsTitle}>Committed Donors (3)</Text>
-        <View style={styles.donorsList}>
-          {donors.map((d, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.donorRow, i < donors.length - 1 && styles.rowBorder]}
-            >
-              <BNAvatar initials={d.i} size={40} committed />
-              <View style={{ flex: 1 }}>
-                <View style={styles.donorNameRow}>
-                  <Text style={styles.donorName}>{d.n}</Text>
-                  <BNBloodBadge group="O+" />
+        {/* Committed donors */}
+        <Text style={styles.sectionLabel}>COMMITTED DONORS</Text>
+
+        {commitments.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyTitle}>No donors yet</Text>
+            <Text style={styles.emptySub}>Donors who accept this request will appear here.</Text>
+          </View>
+        ) : (
+          commitments.map((c) => {
+            const initials = c.donor?.full_name
+              ? c.donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+              : '?';
+            const hasLocation = c.current_latitude != null && c.current_longitude != null;
+            const distKm = (hasLocation && hospital?.latitude && hospital?.longitude)
+              ? haversineKm(c.current_latitude!, c.current_longitude!, hospital.latitude, hospital.longitude)
+              : null;
+            const isLive = hasLocation && c.location_updated_at
+              ? (Date.now() - new Date(c.location_updated_at).getTime()) < 5 * 60 * 1000
+              : false;
+
+            return (
+              <View key={c.id} style={styles.donorCard}>
+                <BNAvatar initials={initials} size={44} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.donorNameRow}>
+                    <Text style={styles.donorName}>{c.donor?.full_name ?? 'Donor'}</Text>
+                    {isLive && (
+                      <View style={styles.liveRow}>
+                        <PulseDot color={BN.success} size={7} />
+                        <Text style={styles.liveText}>LIVE</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.donorMeta}>
+                    {c.donor?.blood_group} · Committed {timeAgo(c.committed_at)}
+                  </Text>
+                  {distKm != null && (
+                    <Text style={styles.donorDist}>{formatDistance(distKm)} from hospital</Text>
+                  )}
+                  {!hasLocation && (
+                    <Text style={styles.donorDist}>Location not shared yet</Text>
+                  )}
                 </View>
-                <View style={styles.donorMeta}>
-                  {d.live && <PulseDot color={BN.success} size={6} />}
-                  <Text style={styles.donorMetaText}>{d.d} · ETA {d.eta} · {d.time}</Text>
-                </View>
+                {c.donor?.phone ? (
+                  <View style={styles.phoneBadge}>
+                    <Text style={styles.phoneText}>{c.donor.phone}</Text>
+                  </View>
+                ) : null}
               </View>
-              <ChevronIcon color={BN.muted} />
-            </TouchableOpacity>
-          ))}
-        </View>
+            );
+          })
+        )}
       </ScrollView>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <TouchableOpacity style={styles.closeBtn}>
-          <Text style={styles.closeBtnText}>Close Request</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BN.bg },
+  center: { alignItems: 'center', justifyContent: 'center' },
   header: {
     backgroundColor: BN.burgundy, paddingBottom: 14, paddingHorizontal: 16,
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  headerTitle: { flex: 1, fontFamily: BN.uiBold, fontSize: 17, color: '#fff' },
-  content: { padding: 16, gap: 14, paddingBottom: 100 },
+  headerTitle: { flex: 1, fontFamily: BN.uiBold, fontSize: 17, color: '#fff', textAlign: 'center', marginRight: 22 },
+  body: { flex: 1 },
+  bodyContent: { padding: 16, gap: 14, paddingBottom: 40 },
   summaryCard: {
-    backgroundColor: '#FFF5F7',
-    borderWidth: 1, borderColor: 'rgba(232,0,61,0.2)',
-    borderRadius: 14, padding: 16,
+    backgroundColor: BN.white, borderRadius: 14, padding: 14,
+    borderWidth: 0.5, borderColor: BN.divider, gap: 10,
   },
-  summaryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  postedTime: { fontFamily: BN.ui, fontSize: 12, color: BN.muted },
-  summaryStats: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 14 },
-  unitsText: { fontFamily: BN.display, fontSize: 32, color: BN.crimson, lineHeight: 34 },
-  unitsLabel: { fontFamily: BN.uiSemiBold, fontSize: 12, color: BN.muted },
-  mapCard: { backgroundColor: BN.burgundyDark, borderRadius: 14, padding: 12 },
-  mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveText: { fontFamily: BN.uiBold, fontSize: 12, color: '#fff', letterSpacing: 0.5 },
-  updatedText: { fontFamily: BN.ui, fontSize: 11, color: 'rgba(255,255,255,0.6)' },
-  donorsTitle: { fontFamily: BN.uiBold, fontSize: 14, color: BN.text },
-  donorsList: { backgroundColor: BN.white, borderRadius: 12, borderWidth: 0.5, borderColor: BN.divider },
-  donorRow: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rowBorder: { borderBottomWidth: 0.5, borderBottomColor: BN.divider },
-  donorNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  summaryTitle: { fontFamily: BN.uiSemiBold, fontSize: 16, color: BN.text },
+  summaryMuted: { fontFamily: BN.ui, fontSize: 12, color: BN.muted, marginTop: 2 },
+  committedCountRow: { flexDirection: 'row' },
+  countBadge: {
+    paddingHorizontal: 10, paddingVertical: 3,
+    backgroundColor: 'rgba(26,122,74,0.12)', borderRadius: 100,
+  },
+  countText: { fontFamily: BN.uiBold, fontSize: 12, color: BN.success },
+  sectionLabel: {
+    fontFamily: BN.uiBold, fontSize: 11, color: BN.muted,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+  },
+  emptyBox: { paddingVertical: 40, alignItems: 'center', gap: 8 },
+  emptyTitle: { fontFamily: BN.uiSemiBold, fontSize: 15, color: BN.text },
+  emptySub: { fontFamily: BN.ui, fontSize: 13, color: BN.muted, textAlign: 'center' },
+  donorCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: BN.white, borderRadius: 12, padding: 14,
+    borderWidth: 0.5, borderColor: BN.divider,
+  },
+  donorNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   donorName: { fontFamily: BN.uiSemiBold, fontSize: 14, color: BN.text },
-  donorMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  donorMetaText: { fontFamily: BN.ui, fontSize: 12, color: BN.muted },
-  footer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 16, backgroundColor: BN.white,
-    borderTopWidth: 0.5, borderTopColor: BN.divider,
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  liveText: { fontFamily: BN.uiBold, fontSize: 10, color: BN.success, letterSpacing: 0.5 },
+  donorMeta: { fontFamily: BN.ui, fontSize: 12, color: BN.muted, marginTop: 2 },
+  donorDist: { fontFamily: BN.uiSemiBold, fontSize: 11, color: BN.info, marginTop: 2 },
+  phoneBadge: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: BN.bg, borderRadius: 8, borderWidth: 0.5, borderColor: BN.divider,
   },
-  closeBtn: {
-    paddingVertical: 14, borderWidth: 1.5, borderColor: BN.crimsonDark,
-    borderRadius: 14, alignItems: 'center',
-  },
-  closeBtnText: { fontFamily: BN.uiSemiBold, fontSize: 15, color: BN.crimsonDark },
+  phoneText: { fontFamily: 'monospace', fontSize: 11, color: BN.text },
 });

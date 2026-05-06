@@ -1,20 +1,94 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { BN, shadow } from '../theme';
 import { BNMap, BNAvatar, BNBloodBadge, PulseDot } from '../components';
+import { supabase, RequestCommitment } from '../lib/supabase';
+import { stopLocationTracking } from '../lib/locationTask';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LiveMap'>;
 
-export function LiveMapScreen({ navigation }: Props) {
+export function LiveMapScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { commitmentId } = route.params;
+  const [commitment, setCommitment] = useState<RequestCommitment | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const updateTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingLocation = useRef<{ lat: number; lng: number } | null>(null);
+
+  const fetchCommitment = useCallback(async () => {
+    const { data } = await supabase
+      .from('request_commitments')
+      .select('*, request:blood_requests(*, hospital:hospital_profiles(*))')
+      .eq('id', commitmentId)
+      .single();
+    if (data) setCommitment(data as RequestCommitment);
+  }, [commitmentId]);
+
+  useEffect(() => { fetchCommitment(); }, [fetchCommitment]);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      locationSubscription.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+        (loc) => {
+          if (!active) return;
+          pendingLocation.current = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+        }
+      );
+
+      // Push to Supabase every 30 seconds
+      updateTimer.current = setInterval(async () => {
+        if (!pendingLocation.current) return;
+        const { lat, lng } = pendingLocation.current;
+        const now = new Date().toISOString();
+        await supabase
+          .from('request_commitments')
+          .update({
+            current_latitude: lat,
+            current_longitude: lng,
+            location_updated_at: now,
+          })
+          .eq('id', commitmentId);
+        setLastUpdated(now);
+        pendingLocation.current = null;
+      }, 30_000);
+    })();
+
+    return () => {
+      active = false;
+      locationSubscription.current?.remove();
+      if (updateTimer.current) clearInterval(updateTimer.current);
+    };
+  }, [commitmentId]);
+
+  const handleStop = async () => {
+    locationSubscription.current?.remove();
+    if (updateTimer.current) clearInterval(updateTimer.current);
+    await stopLocationTracking();
+    navigation.goBack();
+  };
+
+  const req = (commitment as any)?.request;
+  const hospital = req?.hospital;
+  const donor = commitment?.donor;
+  const initials = donor?.full_name
+    ? donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'ME';
 
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       {/* Full-screen map */}
       <BNMap height={812} showHospital showSelf />
 
@@ -23,7 +97,7 @@ export function LiveMapScreen({ navigation }: Props) {
         <View style={styles.topCardHeader}>
           <View>
             <Text style={styles.enRouteTo}>En route to</Text>
-            <Text style={styles.hospitalName}>KEM Hospital</Text>
+            <Text style={styles.hospitalName}>{hospital?.hospital_name ?? 'Hospital'}</Text>
           </View>
           <View style={styles.liveRow}>
             <PulseDot color={BN.success} size={8} />
@@ -32,12 +106,14 @@ export function LiveMapScreen({ navigation }: Props) {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>ETA</Text>
-            <Text style={styles.statValue}>~8 min</Text>
+            <Text style={styles.statLabel}>Blood Group</Text>
+            <Text style={styles.statValue}>{req?.blood_group ?? '—'}</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Distance</Text>
-            <Text style={styles.statValue}>1.4 km</Text>
+            <Text style={styles.statLabel}>Updated</Text>
+            <Text style={styles.statValue}>
+              {lastUpdated ? 'Just now' : 'Waiting…'}
+            </Text>
           </View>
         </View>
       </View>
@@ -45,14 +121,14 @@ export function LiveMapScreen({ navigation }: Props) {
       {/* Bottom card */}
       <View style={[styles.bottomCard, { paddingBottom: insets.bottom + 12 }, shadow.elevated]}>
         <View style={styles.donorRow}>
-          <BNAvatar initials="AM" size={44} />
+          <BNAvatar initials={initials} size={44} />
           <View style={{ flex: 1 }}>
             <Text style={styles.sharingLabel}>You're sharing your location</Text>
             <Text style={styles.sharingMuted}>Hospital is tracking your arrival</Text>
           </View>
-          <BNBloodBadge group="O+" />
+          <BNBloodBadge group={req?.blood_group ?? 'O+'} />
         </View>
-        <TouchableOpacity style={styles.stopBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.stopBtn} onPress={handleStop}>
           <Text style={styles.stopBtnText}>Stop Sharing Location</Text>
         </TouchableOpacity>
       </View>

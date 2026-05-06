@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Animated, Image, ScrollView, Platform,
+  Animated, Image, ScrollView, Platform, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Rect, Path, Line, Circle, G } from 'react-native-svg';
@@ -217,9 +217,11 @@ interface BNButtonProps {
   variant?: ButtonVariant;
   icon?: React.ReactNode;
   onPress?: () => void;
+  loading?: boolean;
+  disabled?: boolean;
 }
-export function BNButton({ children, variant = 'primary', icon, onPress }: BNButtonProps) {
-  const styles: Record<ButtonVariant, { bg: string; color: string; borderColor?: string }> = {
+export function BNButton({ children, variant = 'primary', icon, onPress, loading = false, disabled = false }: BNButtonProps) {
+  const styleMap: Record<ButtonVariant, { bg: string; color: string; borderColor?: string }> = {
     primary: { bg: BN.crimson, color: '#fff' },
     secondary: { bg: '#fff', color: BN.crimson, borderColor: BN.crimson },
     destructive: { bg: '#fff', color: BN.crimsonDark, borderColor: BN.crimsonDark },
@@ -227,21 +229,24 @@ export function BNButton({ children, variant = 'primary', icon, onPress }: BNBut
     disabled: { bg: BN.divider, color: '#fff' },
     success: { bg: BN.success, color: '#fff' },
   };
-  const s = styles[variant];
+  const effectiveVariant = (disabled || loading) ? 'disabled' : variant;
+  const s = styleMap[effectiveVariant];
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={loading || disabled ? undefined : onPress}
       style={{
         height: 52, borderRadius: 14,
         backgroundColor: s.bg,
         borderWidth: s.borderColor ? 1.5 : 0,
         borderColor: s.borderColor,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        opacity: disabled && !loading ? 0.6 : 1,
       }}
       activeOpacity={0.8}
     >
-      {icon}
-      <Text style={{ fontFamily: BN.uiSemiBold, fontSize: 16, color: s.color }}>{children}</Text>
+      {loading
+        ? <ActivityIndicator color="#fff" size="small" />
+        : <>{icon}<Text style={{ fontFamily: BN.uiSemiBold, fontSize: 16, color: s.color }}>{children}</Text></>}
     </TouchableOpacity>
   );
 }

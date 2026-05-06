@@ -17,6 +17,10 @@ import {
   BarlowCondensed_900Black,
 } from '@expo-google-fonts/barlow-condensed';
 
+// Register background location task at startup
+import './src/lib/locationTask';
+
+import { AuthProvider } from './src/contexts/AuthContext';
 import type { RootStackParamList } from './src/types/navigation';
 
 // Auth screens
@@ -81,6 +85,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      <AuthProvider>
       <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
         <StatusBar style="auto" />
         <NavigationContainer>
@@ -122,6 +127,7 @@ export default function App() {
           </Stack.Navigator>
         </NavigationContainer>
       </View>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

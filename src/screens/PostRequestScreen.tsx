@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { BN } from '../theme';
 import { BNButton, BNBottomNav, PulseDot, hospitalTabs } from '../components';
 import { BackIcon, MinusIcon, PlusIcon, CalendarIcon } from '../icons';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PostRequest'>;
 
@@ -13,9 +15,51 @@ const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export function PostRequestScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [selected, setSelected] = useState('O+');
   const [units, setUnits] = useState(2);
   const [urgency, setUrgency] = useState<'urgent' | 'scheduled'>('urgent');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = useCallback(async () => {
+    if (!session) return;
+    if (urgency === 'scheduled' && !scheduledAt.trim()) {
+      Alert.alert('Missing Date', 'Please enter a scheduled date/time.');
+      return;
+    }
+
+    setSubmitting(true);
+    const payload: Record<string, unknown> = {
+      hospital_id: session.user.id,
+      blood_group: selected,
+      units_needed: units,
+      urgency,
+      notes: notes.trim() || null,
+      status: 'active',
+    };
+
+    if (urgency === 'scheduled' && scheduledAt.trim()) {
+      try {
+        const parsed = new Date(scheduledAt.trim());
+        payload.scheduled_at = parsed.toISOString();
+      } catch {
+        Alert.alert('Invalid Date', 'Please use format YYYY-MM-DDTHH:MM');
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('blood_requests').insert([payload]);
+    setSubmitting(false);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      navigation.navigate('ManageRequests');
+    }
+  }, [session, selected, units, urgency, scheduledAt, notes, navigation]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -56,7 +100,7 @@ export function PostRequestScreen({ navigation }: Props) {
             <Text style={styles.stepperValue}>{units}</Text>
             <TouchableOpacity
               style={[styles.stepperBtn, styles.stepperBtnActive]}
-              onPress={() => setUnits(units + 1)}
+              onPress={() => setUnits(Math.min(10, units + 1))}
             >
               <PlusIcon color="#fff" size={18} />
             </TouchableOpacity>
@@ -84,6 +128,22 @@ export function PostRequestScreen({ navigation }: Props) {
           </View>
         </View>
 
+        {/* Scheduled date/time */}
+        {urgency === 'scheduled' && (
+          <View>
+            <Text style={styles.sectionLabel}>SCHEDULED DATE & TIME</Text>
+            <TextInput
+              style={styles.textField}
+              placeholder="YYYY-MM-DDTHH:MM"
+              placeholderTextColor={BN.muted}
+              value={scheduledAt}
+              onChangeText={setScheduledAt}
+              autoCapitalize="none"
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+        )}
+
         {/* Notes */}
         <View>
           <Text style={styles.sectionLabel}>NOTES (OPTIONAL)</Text>
@@ -91,16 +151,21 @@ export function PostRequestScreen({ navigation }: Props) {
             <TextInput
               multiline
               style={styles.notesInput}
-              defaultValue="Trauma patient in ICU after road accident. Donors who can arrive within 60 minutes are urgently needed."
+              placeholder="Any additional information for donors…"
               placeholderTextColor={BN.muted}
+              value={notes}
+              onChangeText={setNotes}
+              maxLength={280}
             />
-            <Text style={styles.charCount}>120 / 280</Text>
+            <Text style={styles.charCount}>{notes.length} / 280</Text>
           </View>
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <BNButton onPress={() => navigation.goBack()}>Post Request</BNButton>
+        <BNButton variant={submitting ? 'disabled' : 'primary'} onPress={submitting ? undefined : handleSubmit}>
+          {submitting ? 'Posting…' : 'Post Request'}
+        </BNButton>
       </View>
     </View>
   );
@@ -139,9 +204,7 @@ const styles = StyleSheet.create({
   },
   stepperBtnActive: { backgroundColor: BN.crimson },
   stepperValue: { fontFamily: BN.display, fontSize: 36, color: BN.crimson },
-  urgencyRow: {
-    flexDirection: 'row', backgroundColor: BN.bg, padding: 4, borderRadius: 12, gap: 4,
-  },
+  urgencyRow: { flexDirection: 'row', backgroundColor: BN.bg, padding: 4, borderRadius: 12, gap: 4 },
   urgencyBtn: {
     flex: 1, height: 48, borderRadius: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -150,6 +213,12 @@ const styles = StyleSheet.create({
   urgencyBtnScheduled: { backgroundColor: BN.white },
   urgencyText: { fontFamily: BN.uiSemiBold, fontSize: 14, color: BN.muted },
   urgencyTextActive: { color: '#fff' },
+  textField: {
+    height: 48, borderWidth: 1, borderColor: BN.divider,
+    borderRadius: 10, paddingHorizontal: 14,
+    fontFamily: BN.ui, fontSize: 15, color: BN.text,
+    backgroundColor: BN.white,
+  },
   notesBox: {
     backgroundColor: BN.white, borderWidth: 1, borderColor: BN.divider,
     borderRadius: 12, padding: 14, minHeight: 100,

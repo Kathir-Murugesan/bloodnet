@@ -3,23 +3,30 @@ export type RootStackParamList = {
   DonorLogin: undefined;
   HospitalLogin: undefined;
   SignUpStep1: undefined;
-  SignUpStep2: undefined;
+  SignUpStep2: {
+    fullName: string;
+    age: string;
+    bloodGroup: string;
+    phone: string;
+    email: string;
+    password: string;
+  };
   SignUpSuccess: undefined;
   AdminPanel: undefined;
 
   // Donor
   DonorApp: undefined;
-  RequestDetail: undefined;
-  ConfirmModal: undefined;
+  RequestDetail: { requestId: string };
+  ConfirmModal: { requestId: string };
   Commitments: undefined;
-  LiveMap: undefined;
+  LiveMap: { commitmentId: string };
   DonorProfile: undefined;
 
   // Hospital
   HospitalApp: undefined;
   PostRequest: undefined;
   ManageRequests: undefined;
-  RequestManage: undefined;
+  RequestManage: { requestId: string };
   HospitalProfile: undefined;
 
   // Cross-cutting

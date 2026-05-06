@@ -14,17 +14,39 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.bloodnet.app"
+      "bundleIdentifier": "com.bloodnet.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "BloodNet uses your location to find nearby blood requests.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BloodNet tracks your location in the background so hospitals can follow your journey when you donate."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/bloodnet-logo.png",
         "backgroundColor": "#E8003D"
       },
-      "package": "com.bloodnet.app"
+      "package": "com.bloodnet.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/bloodnet-logo.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "BloodNet uses your location to match you with nearby blood requests and track your journey to the hospital.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      "expo-task-manager"
+    ]
   }
 }

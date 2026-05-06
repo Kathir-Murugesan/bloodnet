@@ -7,12 +7,50 @@ import type { RootStackParamList } from '../types/navigation';
 import { BN } from '../theme';
 import { BNAppIcon, BNInput, BNButton } from '../components';
 import { CrossIcon, EyeIcon } from '../icons';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HospitalLogin'>;
 
+const ADMIN_USER = 'Admin';
+const ADMIN_PASS = 'IamtheownerofBloodNet';
+
 export function HospitalLoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { signInAsAdmin } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSignIn() {
+    if (!username.trim() || !password) {
+      setError('Please enter your username and password.');
+      return;
+    }
+    setError('');
+
+    // Admin bypass
+    if (username.trim() === ADMIN_USER && password === ADMIN_PASS) {
+      signInAsAdmin();
+      navigation.replace('AdminPanel');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const email = `${username.trim().toLowerCase()}@bloodnet.internal`;
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        setError("Those credentials don't match. Please try again.");
+      } else {
+        navigation.replace('HospitalApp');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -28,12 +66,18 @@ export function HospitalLoginScreen({ navigation }: Props) {
         <Text style={styles.heading}>Welcome Back</Text>
         <Text style={styles.portal}>Hospital Portal</Text>
         <View style={styles.form}>
-          <BNInput label="Username" value="kemhospital" />
+          <BNInput
+            label="Username"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="your_hospital"
+          />
           <BNInput
             label="Password"
-            value="••••••••••"
+            value={password}
+            onChangeText={setPassword}
             secureTextEntry={!showPw}
-            error="Those credentials don't match. Please try again."
+            error={error}
             trailing={
               <TouchableOpacity onPress={() => setShowPw((v) => !v)}>
                 <EyeIcon color={BN.muted} />
@@ -41,7 +85,7 @@ export function HospitalLoginScreen({ navigation }: Props) {
             }
           />
         </View>
-        <BNButton onPress={() => navigation.navigate('HospitalApp')}>Sign In</BNButton>
+        <BNButton onPress={handleSignIn} loading={loading}>Sign In</BNButton>
         <View style={{ flex: 1 }} />
         <Text style={styles.contact}>Contact Blood Net Admin for access</Text>
       </ScrollView>
@@ -58,8 +102,5 @@ const styles = StyleSheet.create({
   heading: { fontFamily: BN.uiBold, fontSize: 28, color: BN.text },
   portal: { fontFamily: BN.ui, fontSize: 14, color: BN.muted, marginTop: 4, marginBottom: 28 },
   form: { gap: 14, marginBottom: 28 },
-  contact: {
-    textAlign: 'center', fontFamily: BN.ui, fontSize: 13, color: BN.muted,
-    fontStyle: 'italic', paddingBottom: 28, marginTop: 24,
-  },
+  contact: { textAlign: 'center', fontFamily: BN.ui, fontSize: 13, color: BN.muted, fontStyle: 'italic', paddingBottom: 28, marginTop: 24 },
 });
