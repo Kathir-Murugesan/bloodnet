@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blood Net — Mobile App Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800;900&display=swap" />
+<style>
+  html, body { margin: 0; padding: 0; background: #1a0008; font-family: 'DM Sans', system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { color: #1A0008; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="bn-tokens.jsx"></script>
+<script type="text/babel" src="bn-screens-auth.jsx"></script>
+<script type="text/babel" src="bn-screens-donor.jsx"></script>
+<script type="text/babel" src="bn-screens-hospital.jsx"></script>
+
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+function App() {
+  return (
+    <DesignCanvas
+      title="Blood Net"
+      subtitle="Mobile app · Donors, Hospitals & Admin"
+      brandColor="#E8003D"
+      brandTextColor="#fff"
+      brandLogoSrc="assets/bloodnet-logo.png"
+    >
+      <DCSection id="overview" title="Overview" subtitle="A donor↔hospital matchmaking app. Real-time urgent requests, live location during donor commitments, hospital ops dashboard, admin controls.">
+        <DCArtboard id="cover" label="Brand & system at a glance" width={760} height={812}>
+          <CoverBoard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="auth" title="01 · Onboarding & Auth" subtitle="Splash → Donor sign-up → Donor / Hospital login → Admin panel for creating hospitals.">
+        <DCArtboard id="s01" label="01 Splash" width={375} height={812}><S01_Splash /></DCArtboard>
+        <DCArtboard id="s02" label="02 Sign Up · Identity" width={375} height={812}><S02_SignUpStep1 /></DCArtboard>
+        <DCArtboard id="s03" label="03 Sign Up · Contact" width={375} height={812}><S03_SignUpStep2 /></DCArtboard>
+        <DCArtboard id="s03b" label="03b Welcome" width={375} height={812}><S03b_SignUpSuccess /></DCArtboard>
+        <DCArtboard id="s04" label="04 Donor Login" width={375} height={812}><S04_DonorLogin /></DCArtboard>
+        <DCArtboard id="s05" label="05 Hospital Login" width={375} height={812}><S05_HospitalLogin /></DCArtboard>
+        <DCArtboard id="s06" label="06 Admin · Hospital Manager" width={375} height={812}><S06_AdminPanel /></DCArtboard>
+        <DCArtboard id="s07" label="07 Admin · Create Hospital" width={375} height={812}><S07_AdminCreate /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="donor" title="02 · Donor Experience" subtitle="Browse nearby requests, commit, share live location en route, track history.">
+        <DCArtboard id="s08" label="08 Donor Home" width={375} height={812}><S08_DonorHome /></DCArtboard>
+        <DCArtboard id="s09" label="09 Request Detail" width={375} height={812}><S09_RequestDetail /></DCArtboard>
+        <DCArtboard id="s09a" label="09a Confirm Modal" width={375} height={812}><S09a_ConfirmModal /></DCArtboard>
+        <DCArtboard id="s10" label="10 My Commitments" width={375} height={812}><S10_Commitments /></DCArtboard>
+        <DCArtboard id="s11" label="11 Live Location" width={375} height={812}><S11_LiveMap /></DCArtboard>
+        <DCArtboard id="s12" label="12 Donor Profile" width={375} height={812}><S12_DonorProfile /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="hospital" title="03 · Hospital Experience" subtitle="Post requests, watch committed donors arrive in real time, manage profile.">
+        <DCArtboard id="s13" label="13 Hospital Dashboard" width={375} height={812}><S13_HospitalDashboard /></DCArtboard>
+        <DCArtboard id="s14" label="14 Post Request" width={375} height={812}><S14_PostRequest /></DCArtboard>
+        <DCArtboard id="s15" label="15 Manage Requests" width={375} height={812}><S15_ManageRequests /></DCArtboard>
+        <DCArtboard id="s16" label="16 Request · Live Tracking" width={375} height={812}><S16_RequestManage /></DCArtboard>
+        <DCArtboard id="s17" label="17 Hospital Profile" width={375} height={812}><S17_HospitalProfile /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="cross" title="04 · Cross-cutting" subtitle="System-wide touchpoints.">
+        <DCArtboard id="s18" label="18 Notifications" width={375} height={812}><S18_Notifications /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+function CoverBoard() {
+  const { BN, BNAppIcon, BNLogoMark, BNBloodBadge, BNButton, BNTag } = window;
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: BN.bg, fontFamily: BN.ui }}>
+      <div style={{ background: BN.gradient, color: '#fff', padding: '36px 40px 32px', display: 'flex', alignItems: 'center', gap: 24 }}>
+        <BNAppIcon size={104} radius={24} />
+        <div>
+          <div style={{ fontFamily: BN.display, fontSize: 56, fontWeight: 800, letterSpacing: 2, lineHeight: 0.95 }}>BLOOD NET</div>
+          <div style={{ fontSize: 15, opacity: 0.88, marginTop: 6, maxWidth: 420 }}>Connect blood donors with hospitals — fast, in real time.</div>
+        </div>
+      </div>
+      <div style={{ padding: 32, flex: 1, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: BN.muted, textTransform: 'uppercase', marginBottom: 10 }}>Color system</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 22 }}>
+            {[
+              ['Crimson', BN.crimson, '#fff'],
+              ['Crimson Dark', BN.crimsonDark, '#fff'],
+              ['Burgundy', BN.burgundy, '#fff'],
+              ['Burgundy Dark', BN.burgundyDark, '#fff'],
+              ['Surface', BN.bg, BN.text],
+              ['Success', BN.success, '#fff'],
+              ['Info', BN.info, '#fff'],
+              ['Warn', BN.warn, '#fff'],
+            ].map(([n, hex, fg]) => (
+              <div key={n} style={{ background: hex, color: fg, padding: '14px 10px', borderRadius: 8, border: hex === BN.bg ? `1px solid ${BN.divider}` : 'none' }}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{n}</div>
+                <div style={{ fontSize: 10, opacity: 0.75, fontFamily: 'ui-monospace, monospace' }}>{hex}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: BN.muted, textTransform: 'uppercase', marginBottom: 10 }}>Typography</div>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 16, border: `0.5px solid ${BN.divider}` }}>
+            <div style={{ fontFamily: BN.display, fontSize: 36, fontWeight: 800, color: BN.crimson, lineHeight: 1 }}>Barlow Condensed</div>
+            <div style={{ fontSize: 12, color: BN.muted, marginTop: 4 }}>Display — counts, urgent metrics, hero numerics</div>
+            <div style={{ fontFamily: BN.ui, fontSize: 22, fontWeight: 700, marginTop: 12 }}>DM Sans</div>
+            <div style={{ fontSize: 12, color: BN.muted, marginTop: 2 }}>UI — body, headers, controls (400/500/600/700)</div>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: BN.muted, textTransform: 'uppercase', marginBottom: 10 }}>Blood-group system</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 22 }}>
+            {['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => <BNBloodBadge key={g} group={g} size="md" />)}
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: BN.muted, textTransform: 'uppercase', marginBottom: 10 }}>Status tags</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 22 }}>
+            <BNTag color={BN.crimson} dot>Urgent</BNTag>
+            <BNTag color={BN.info}>Scheduled</BNTag>
+            <BNTag color={BN.success}>Committed</BNTag>
+            <BNTag color={BN.muted}>Closed</BNTag>
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: BN.muted, textTransform: 'uppercase', marginBottom: 10 }}>Buttons</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <BNButton>Commit to donate</BNButton>
+            <BNButton variant="secondary">View hospital</BNButton>
+            <BNButton variant="destructive">Close request</BNButton>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: BN.burgundyDark, color: '#fff', padding: '20px 40px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <BNLogoMark size={20} fill="#fff" />
+        <div style={{ fontSize: 13, opacity: 0.78 }}>18 screens across donor, hospital and admin · iOS / Android · Built per Blood Net PRD & Design System.</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
