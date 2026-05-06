@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Blood Net",
+    "slug": "blood-net",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/bloodnet-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/bloodnet-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E8003D"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bloodnet.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/bloodnet-logo.png",
+        "backgroundColor": "#E8003D"
+      },
+      "package": "com.bloodnet.app"
+    },
+    "web": {
+      "favicon": "./assets/bloodnet-logo.png"
+    }
+  }
+}
