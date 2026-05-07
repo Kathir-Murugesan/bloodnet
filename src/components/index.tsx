@@ -353,8 +353,9 @@ interface BNMapProps {
   hospitalLng?: number;
   donorLat?: number;
   donorLng?: number;
+  donorMarkers?: Array<{ lat: number; lng: number; initials: string; name: string }>;
 }
-export function BNMap({ height = 180, donors = 0, dark = false, showHospital = true, showSelf = false, label, hospitalLat, hospitalLng, donorLat, donorLng }: BNMapProps) {
+export function BNMap({ height = 180, donors = 0, dark = false, showHospital = true, showSelf = false, label, hospitalLat, hospitalLng, donorLat, donorLng, donorMarkers }: BNMapProps) {
   if (hospitalLat && hospitalLng) {
     return (
       <View style={{ borderRadius: 12, overflow: 'hidden' }}>
@@ -366,6 +367,7 @@ export function BNMap({ height = 180, donors = 0, dark = false, showHospital = t
           hospitalLng={hospitalLng}
           donorLat={donorLat}
           donorLng={donorLng}
+          donorMarkers={donorMarkers}
           showRoute={!!(donorLat && donorLng)}
         />
         {label ? (

@@ -8,24 +8,38 @@ import { BNInput, BNButton } from '../components';
 import { LogoutIcon, CrossIcon, MoreVIcon, PlusIcon, CloseIcon, EyeIcon } from '../icons';
 import { supabase, supabaseAdmin, HospitalProfile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { WebView } from 'react-native-webview';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminPanel'>;
 
-const TOMTOM_API_KEY = 'apy4IVOT24PyWLcNEKSpoiMc9DKfU5Rn';
-
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const encoded = encodeURIComponent(address);
-    const url = `https://api.tomtom.com/search/2/geocode/${encoded}.json?key=${TOMTOM_API_KEY}&limit=1`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const pos = json?.results?.[0]?.position;
-    if (pos) return { lat: pos.lat, lng: pos.lon };
-    return null;
-  } catch {
-    return null;
-  }
-}
+const mapPickerHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <link rel="stylesheet" href="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.1/maps/maps.css">
+  <script src="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.1/maps/maps-web.min.js"></script>
+  <style>* { margin: 0; padding: 0; } #map { width: 100%; height: 100vh; } #hint { position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.65);color:#fff;padding:6px 14px;border-radius:20px;font-size:13px;font-family:sans-serif;pointer-events:none; }</style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="hint">Tap anywhere to place hospital pin</div>
+  <script>
+    var map = tt.map({ key: 'apy4IVOT24PyWLcNEKSpoiMc9DKfU5Rn', container: 'map', center: [72.877, 19.076], zoom: 11 });
+    var marker = null;
+    map.on('click', function(e) {
+      var lat = e.lngLat.lat, lng = e.lngLat.lng;
+      if (marker) marker.remove();
+      marker = new tt.Marker({ color: '#e8003d', draggable: true }).setLngLat([lng, lat]).addTo(map);
+      marker.on('dragend', function() {
+        var p = marker.getLngLat();
+        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: p.lat, lng: p.lng }));
+      });
+      document.getElementById('hint').style.display = 'none';
+      window.ReactNativeWebView.postMessage(JSON.stringify({ lat: lat, lng: lng }));
+    });
+  </script>
+</body>
+</html>`;
 
 function generatePassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!';
@@ -43,7 +57,9 @@ export function AdminPanelScreen({ navigation }: Props) {
   const [hospName, setHospName] = useState('');
   const [hospUsername, setHospUsername] = useState('');
   const [hospPassword, setHospPassword] = useState('');
-  const [hospAddress, setHospAddress] = useState('');
+  const [hospLat, setHospLat] = useState<number | null>(null);
+  const [hospLng, setHospLng] = useState<number | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -82,15 +98,13 @@ export function AdminPanelScreen({ navigation }: Props) {
       Alert.alert('Success', `Hospital "${hospName}" created.\nUsername: ${hospUsername}\nPassword: ${hospPassword}`);
       setShowCreate(false);
       const userId = data.user!.id;
-      if (hospAddress.trim()) {
-        const coords = await geocodeAddress(hospAddress.trim());
+      if (hospLat !== null && hospLng !== null) {
         await supabase.from('hospital_profiles').update({
-          address: hospAddress.trim(),
-          latitude: coords?.lat ?? null,
-          longitude: coords?.lng ?? null,
+          latitude: hospLat,
+          longitude: hospLng,
         }).eq('id', userId);
       }
-      setHospName(''); setHospUsername(''); setHospPassword(''); setHospAddress('');
+      setHospName(''); setHospUsername(''); setHospPassword(''); setHospLat(null); setHospLng(null);
       fetchHospitals();
     } finally {
       setCreating(false);
@@ -163,7 +177,17 @@ export function AdminPanelScreen({ navigation }: Props) {
               {formError ? <Text style={styles.formError}>{formError}</Text> : null}
               <BNInput label="Hospital Name" value={hospName} onChangeText={setHospName} placeholder="City General Hospital" />
               <BNInput label="Username" value={hospUsername} onChangeText={setHospUsername} placeholder="citygeneral" />
-              <BNInput label="Hospital Address" value={hospAddress} onChangeText={setHospAddress} placeholder="123 Main St, City, State" />
+              {/* Location picker */}
+              <View>
+                <Text style={styles.fieldLabel}>Hospital Location</Text>
+                <TouchableOpacity style={styles.mapPickerBtn} onPress={() => setShowMapPicker(true)}>
+                  {hospLat && hospLng ? (
+                    <Text style={styles.mapPickerSelected}>📍 Location selected ({hospLat.toFixed(4)}, {hospLng.toFixed(4)})</Text>
+                  ) : (
+                    <Text style={styles.mapPickerPlaceholder}>Tap to pick location on map</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
               <BNInput
                 label="Password"
                 value={hospPassword}
@@ -184,6 +208,30 @@ export function AdminPanelScreen({ navigation }: Props) {
             </View>
           </View>
         </View>
+        <Modal visible={showMapPicker} animationType="slide" onRequestClose={() => setShowMapPicker(false)}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.mapPickerHeader}>
+              <Text style={styles.mapPickerTitle}>Tap to place hospital pin</Text>
+              <TouchableOpacity onPress={() => setShowMapPicker(false)} style={styles.mapPickerDone}>
+                <Text style={styles.mapPickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <WebView
+              originWhitelist={['*']}
+              javaScriptEnabled
+              domStorageEnabled
+              style={{ flex: 1 }}
+              onMessage={(e) => {
+                try {
+                  const { lat, lng } = JSON.parse(e.nativeEvent.data);
+                  setHospLat(lat);
+                  setHospLng(lng);
+                } catch {}
+              }}
+              source={{ html: mapPickerHtml }}
+            />
+          </View>
+        </Modal>
       </Modal>
     </View>
   );
@@ -216,4 +264,12 @@ const styles = StyleSheet.create({
   sheetClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: BN.bg, alignItems: 'center', justifyContent: 'center' },
   formError: { fontFamily: BN.ui, fontSize: 13, color: BN.crimson, backgroundColor: 'rgba(232,0,61,0.08)', padding: 10, borderRadius: 8 },
   generatePw: { fontFamily: BN.uiSemiBold, fontSize: 13, color: BN.crimson },
+  fieldLabel: { fontFamily: BN.uiSemiBold, fontSize: 13, color: BN.muted, marginBottom: 6 },
+  mapPickerBtn: { borderWidth: 1, borderColor: BN.divider, borderRadius: 10, padding: 12, backgroundColor: BN.bg },
+  mapPickerSelected: { fontFamily: BN.uiSemiBold, fontSize: 13, color: BN.success },
+  mapPickerPlaceholder: { fontFamily: BN.ui, fontSize: 13, color: BN.muted },
+  mapPickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: BN.burgundy },
+  mapPickerTitle: { fontFamily: BN.uiSemiBold, fontSize: 15, color: '#fff' },
+  mapPickerDone: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: BN.crimson, borderRadius: 8 },
+  mapPickerDoneText: { fontFamily: BN.uiBold, fontSize: 14, color: '#fff' },
 });

@@ -52,7 +52,7 @@ export function ConfirmModalScreen({ navigation, route }: Props) {
             await startLocationTracking(existing.id);
             navigation.navigate('LiveMap', { commitmentId: existing.id });
           } else {
-            navigation.navigate('Commitments');
+            navigation.navigate('LiveMap', { commitmentId: existing.id });
           }
         }
         return;
@@ -86,7 +86,7 @@ export function ConfirmModalScreen({ navigation, route }: Props) {
             await pushLocationOnce(data.id);
           }
           navigation.pop();
-          navigation.navigate('Commitments');
+          navigation.navigate('LiveMap', { commitmentId: data.id });
         }
       }
     } finally {

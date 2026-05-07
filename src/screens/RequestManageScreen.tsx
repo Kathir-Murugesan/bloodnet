@@ -164,11 +164,21 @@ export function RequestManageScreen({ navigation, route }: Props) {
 
         {/* Map showing donors */}
         <BNMap
-          height={160}
+          height={220}
           showHospital
           label={`${hospital?.hospital_name ?? 'Hospital'} · Live donor tracking`}
           hospitalLat={hospital?.latitude ?? undefined}
           hospitalLng={hospital?.longitude ?? undefined}
+          donorMarkers={commitments
+            .filter((c) => c.current_latitude != null && c.current_longitude != null)
+            .map((c) => ({
+              lat: c.current_latitude!,
+              lng: c.current_longitude!,
+              initials: c.donor?.full_name
+                ? c.donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                : '?',
+              name: c.donor?.full_name ?? 'Donor',
+            }))}
         />
 
         {/* Committed donors */}

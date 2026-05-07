@@ -13,6 +13,7 @@ interface TomTomMapProps {
   donorLng?: number;
   showRoute?: boolean;
   onRouteInfo?: (info: { distKm: string; etaMins: number }) => void;
+  donorMarkers?: Array<{ lat: number; lng: number; initials: string; name: string }>;
 }
 
 export function TomTomMap({
@@ -26,6 +27,7 @@ export function TomTomMap({
   donorLng,
   showRoute,
   onRouteInfo,
+  donorMarkers,
 }: TomTomMapProps) {
   const html = `<!DOCTYPE html>
 <html>
@@ -53,6 +55,7 @@ export function TomTomMap({
     var donorLat = ${donorLat !== undefined ? donorLat : 'null'};
     var donorLng = ${donorLng !== undefined ? donorLng : 'null'};
     var showRoute = ${showRoute ? 'true' : 'false'};
+    var donorMarkers = ${donorMarkers && donorMarkers.length > 0 ? JSON.stringify(donorMarkers) : '[]'};
 
     var map = tt.map({
       key: API_KEY,
@@ -82,6 +85,20 @@ export function TomTomMap({
       new tt.Marker({ element: createMarkerEl('#1a6bb5') })
         .setLngLat([donorLng, donorLat])
         .addTo(map);
+    }
+
+    donorMarkers.forEach(function(d) {
+      var el = document.createElement('div');
+      el.style.cssText = 'width:34px;height:34px;border-radius:50%;background:#1a6bb5;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);';
+      el.textContent = d.initials;
+      new tt.Marker({ element: el }).setLngLat([d.lng, d.lat]).addTo(map);
+    });
+
+    if (donorMarkers.length > 0 && hospitalLat !== null && !showRoute) {
+      var bounds = new tt.LngLatBounds();
+      if (hospitalLat !== null && hospitalLng !== null) bounds.extend([hospitalLng, hospitalLat]);
+      donorMarkers.forEach(function(d) { bounds.extend([d.lng, d.lat]); });
+      map.on('load', function() { map.fitBounds(bounds, { padding: 60, maxZoom: 15 }); });
     }
 
     if (showRoute && hospitalLat !== null && hospitalLng !== null && donorLat !== null && donorLng !== null) {
