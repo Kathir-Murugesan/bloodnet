@@ -17,73 +17,82 @@ function buildMapPickerHtml(lat: number, lng: number): string {
 <html>
 <head>
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; }
     #map { width: 100%; height: 100vh; }
-    #search-wrap {
-      position: fixed; top: 10px; left: 10px; right: 10px; z-index: 1000;
-    }
+    #search-wrap { position: fixed; top: 10px; left: 10px; right: 10px; z-index: 1000; display: flex; gap: 6px; }
     #search-input {
-      width: 100%; padding: 11px 14px; border-radius: 10px; border: none;
+      flex: 1; padding: 11px 14px; border-radius: 10px; border: none;
       font-size: 14px; font-family: sans-serif;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.35); outline: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3); outline: none;
     }
-    #hint {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.65); color: #fff; padding: 6px 14px;
-      border-radius: 20px; font-size: 13px; font-family: sans-serif;
-      pointer-events: none; white-space: nowrap;
+    #search-btn {
+      padding: 11px 16px; border-radius: 10px; border: none;
+      background: #e8003d; color: white; font-size: 14px; font-weight: bold;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3); cursor: pointer;
     }
+    #results {
+      position: fixed; top: 58px; left: 10px; right: 10px; z-index: 1000;
+      background: white; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      max-height: 220px; overflow-y: auto; display: none;
+    }
+    .ri { padding: 11px 14px; border-bottom: 0.5px solid #eee; font-size: 13px; font-family: sans-serif; cursor: pointer; line-height: 1.4; }
+    .ri:last-child { border-bottom: none; }
   </style>
 </head>
 <body>
   <div id="search-wrap">
-    <input id="search-input" type="text" placeholder="Search hospital name or address…" />
+    <input id="search-input" type="text" placeholder="Search hospital or address…" />
+    <button id="search-btn" onclick="doSearch()">Search</button>
   </div>
+  <div id="results"></div>
   <div id="map"></div>
-  <div id="hint">Search above or tap map to place pin</div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    var map, marker;
-    function initMap() {
-      map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: ${lat}, lng: ${lng} },
-        zoom: 12,
-        disableDefaultUI: true,
-        zoomControl: true,
-        gestureHandling: 'greedy'
+    var map = L.map('map', { zoomControl: true, attributionControl: false }).setView([${lat}, ${lng}], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    var pinIcon = L.divIcon({
+      html: '<div style="width:22px;height:22px;border-radius:50%;background:#e8003d;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>',
+      className: '', iconSize: [22, 22], iconAnchor: [11, 11]
+    });
+    var marker = null;
+    function placePin(lat, lng) {
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
+      marker.on('dragend', function() {
+        var p = marker.getLatLng();
+        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: p.lat, lng: p.lng }));
       });
-      marker = new google.maps.Marker({ map: null, draggable: true });
-      var autocomplete = new google.maps.places.Autocomplete(
-        document.getElementById('search-input'),
-        { types: ['establishment', 'geocode'] }
-      );
-      autocomplete.bindTo('bounds', map);
-      autocomplete.addListener('place_changed', function() {
-        var place = autocomplete.getPlace();
-        if (!place.geometry || !place.geometry.location) return;
-        map.setCenter(place.geometry.location);
-        map.setZoom(16);
-        marker.setPosition(place.geometry.location);
-        marker.setMap(map);
-        document.getElementById('hint').style.display = 'none';
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        }));
-      });
-      marker.addListener('dragend', function() {
-        var pos = marker.getPosition();
-        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: pos.lat(), lng: pos.lng() }));
-      });
-      map.addListener('click', function(e) {
-        marker.setPosition(e.latLng);
-        marker.setMap(map);
-        document.getElementById('hint').style.display = 'none';
-        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
-      });
+      window.ReactNativeWebView.postMessage(JSON.stringify({ lat: lat, lng: lng }));
     }
+    map.on('click', function(e) {
+      placePin(e.latlng.lat, e.latlng.lng);
+      document.getElementById('results').style.display = 'none';
+    });
+    function doSearch() {
+      var q = document.getElementById('search-input').value.trim();
+      if (!q) return;
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q), { headers: { 'Accept-Language': 'en' } })
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+          var div = document.getElementById('results');
+          div.innerHTML = items.length
+            ? items.map(function(r) { return '<div class="ri" onclick="pick(' + r.lat + ',' + r.lon + ')">' + r.display_name + '</div>'; }).join('')
+            : '<div class="ri" style="color:#999;">No results found</div>';
+          div.style.display = 'block';
+        }).catch(function() {});
+    }
+    function pick(lat, lng) {
+      lat = parseFloat(lat); lng = parseFloat(lng);
+      map.setView([lat, lng], 16);
+      placePin(lat, lng);
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('search-input').blur();
+    }
+    document.getElementById('search-input').addEventListener('keyup', function(e) { if (e.key === 'Enter') doSearch(); });
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCaxjxV0d17zYME-OR6xiLByrXJ-MFyiZ4&libraries=places&callback=initMap" async defer></script>
 </body>
 </html>`;
 }

@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { BN } from '../theme';
 import { BNBloodBadge, BNTag, BNMap, BNAvatar, PulseDot } from '../components';
+import { TomTomMap } from '../components/TomTomMap';
 import { BackIcon } from '../icons';
 import { supabase, BloodRequest, RequestCommitment, DonorProfile } from '../lib/supabase';
 import { formatDistance, haversineKm, timeAgo } from '../lib/distance';
-import { GOOGLE_MAPS_API_KEY } from '../lib/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestManage'>;
 
@@ -24,6 +24,7 @@ export function RequestManageScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [routeMap, setRouteMap] = useState<Record<string, { distKm: string; etaMins: number }>>({});
   const [marking, setMarking] = useState<string | null>(null);
+  const [mapDonor, setMapDonor] = useState<CommitmentWithDonor | null>(null);
 
   async function fetchRoutes(commits: CommitmentWithDonor[], hospitalLat: number, hospitalLng: number) {
     const results: Record<string, { distKm: string; etaMins: number }> = {};
@@ -32,14 +33,14 @@ export function RequestManageScreen({ navigation, route }: Props) {
         .filter((c) => c.current_latitude != null && c.current_longitude != null)
         .map(async (c) => {
           try {
-            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${c.current_latitude},${c.current_longitude}&destination=${hospitalLat},${hospitalLng}&mode=driving&key=${GOOGLE_MAPS_API_KEY}`;
+            const url = `https://router.project-osrm.org/route/v1/driving/${c.current_longitude},${c.current_latitude};${hospitalLng},${hospitalLat}?overview=false`;
             const res = await fetch(url);
             const json = await res.json();
-            const leg = json?.routes?.[0]?.legs?.[0];
-            if (leg) {
+            const route = json?.routes?.[0];
+            if (route) {
               results[c.id] = {
-                distKm: (leg.distance.value / 1000).toFixed(1),
-                etaMins: Math.round(leg.duration.value / 60),
+                distKm: (route.distance / 1000).toFixed(1),
+                etaMins: Math.round(route.duration / 60),
               };
             }
           } catch { /* ignore individual failures */ }
@@ -242,6 +243,14 @@ export function RequestManageScreen({ navigation, route }: Props) {
                       : <Text style={styles.markBtnText}>✓ Mark Donated</Text>
                     }
                   </TouchableOpacity>
+                  {hasLocation && (
+                    <TouchableOpacity
+                      style={styles.mapBtn}
+                      onPress={() => setMapDonor(c)}
+                    >
+                      <Text style={styles.mapBtnText}>📍 View Route</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {c.donor?.phone ? (
                   <View style={styles.phoneBadge}>
@@ -253,6 +262,45 @@ export function RequestManageScreen({ navigation, route }: Props) {
           })
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!mapDonor}
+        animationType="slide"
+        onRequestClose={() => setMapDonor(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={styles.mapModalHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mapModalName} numberOfLines={1}>
+                {mapDonor?.donor?.full_name ?? 'Donor'}
+              </Text>
+              <Text style={styles.mapModalSub}>Route to {hospital?.hospital_name ?? 'Hospital'}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setMapDonor(null)} style={styles.mapModalClose}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          {mapDonor && (
+            <TomTomMap
+              height={700}
+              centerLat={mapDonor.current_latitude ?? hospital?.latitude ?? 19.076}
+              centerLng={mapDonor.current_longitude ?? hospital?.longitude ?? 72.877}
+              hospitalLat={hospital?.latitude ?? undefined}
+              hospitalLng={hospital?.longitude ?? undefined}
+              donorLat={mapDonor.current_latitude ?? undefined}
+              donorLng={mapDonor.current_longitude ?? undefined}
+              showRoute={mapDonor.current_latitude != null && hospital?.latitude != null}
+            />
+          )}
+          {mapDonor?.current_latitude == null && (
+            <View style={styles.mapNoLocation}>
+              <Text style={styles.mapNoLocationText}>
+                This donor hasn't shared their location yet.
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -308,4 +356,23 @@ const styles = StyleSheet.create({
     backgroundColor: BN.success, borderRadius: 8, alignItems: 'center',
   },
   markBtnText: { fontFamily: BN.uiBold, fontSize: 13, color: '#fff' },
+  mapBtn: {
+    marginTop: 6, paddingVertical: 7, paddingHorizontal: 14,
+    backgroundColor: 'rgba(26,107,181,0.12)', borderRadius: 8,
+    alignItems: 'center', borderWidth: 0.5, borderColor: 'rgba(26,107,181,0.3)',
+  },
+  mapBtnText: { fontFamily: BN.uiSemiBold, fontSize: 12, color: '#1a6bb5' },
+  mapModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: BN.burgundy, paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+  },
+  mapModalName: { fontFamily: BN.uiBold, fontSize: 16, color: '#fff' },
+  mapModalSub: { fontFamily: BN.ui, fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  mapModalClose: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  mapNoLocation: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  mapNoLocationText: { color: 'rgba(255,255,255,0.6)', fontFamily: 'DMSans_400Regular', fontSize: 14, textAlign: 'center', padding: 32 },
 });

@@ -1,6 +1,5 @@
 import React from 'react';
 import { WebView } from 'react-native-webview';
-import { GOOGLE_MAPS_API_KEY } from '../lib/constants';
 
 interface TomTomMapProps {
   height: number;
@@ -22,7 +21,6 @@ export function TomTomMap({
   centerLng,
   hospitalLat,
   hospitalLng,
-  hospitalName,
   donorLat,
   donorLng,
   showRoute,
@@ -33,7 +31,8 @@ export function TomTomMap({
 <html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { width: 100%; height: 100vh; overflow: hidden; }
@@ -42,6 +41,7 @@ export function TomTomMap({
 </head>
 <body>
   <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     var centerLat = ${centerLat};
     var centerLng = ${centerLng};
@@ -52,102 +52,79 @@ export function TomTomMap({
     var showRoute = ${showRoute ? 'true' : 'false'};
     var donorMarkers = ${donorMarkers && donorMarkers.length > 0 ? JSON.stringify(donorMarkers) : '[]'};
 
-    function initMap() {
-      var map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: centerLat, lng: centerLng },
-        zoom: 13,
-        disableDefaultUI: true,
-        zoomControl: false
+    var map = L.map('map', { zoomControl: false, attributionControl: false })
+      .setView([centerLat, centerLng], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    function circleIcon(color, size) {
+      size = size || 20;
+      return L.divIcon({
+        html: '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>',
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2]
       });
+    }
 
-      if (hospitalLat !== null && hospitalLng !== null) {
-        new google.maps.Marker({
-          position: { lat: hospitalLat, lng: hospitalLng },
-          map: map,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#e8003d',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 3
-          }
-        });
-      }
-
-      if (donorLat !== null && donorLng !== null) {
-        new google.maps.Marker({
-          position: { lat: donorLat, lng: donorLng },
-          map: map,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#1a6bb5',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 3
-          }
-        });
-      }
-
-      donorMarkers.forEach(function(d) {
-        new google.maps.Marker({
-          position: { lat: d.lat, lng: d.lng },
-          map: map,
-          label: { text: d.initials, color: '#fff', fontSize: '11px', fontWeight: 'bold' },
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 16,
-            fillColor: '#1a6bb5',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2
-          }
-        });
+    function initialsIcon(initials, color) {
+      return L.divIcon({
+        html: '<div style="width:34px;height:34px;border-radius:50%;background:' + color + ';color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);">' + initials + '</div>',
+        className: '',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
       });
+    }
 
-      if (donorMarkers.length > 0 && hospitalLat !== null && !showRoute) {
-        var bounds = new google.maps.LatLngBounds();
-        if (hospitalLat !== null && hospitalLng !== null) bounds.extend({ lat: hospitalLat, lng: hospitalLng });
-        donorMarkers.forEach(function(d) { bounds.extend({ lat: d.lat, lng: d.lng }); });
-        map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
-      }
+    if (hospitalLat !== null && hospitalLng !== null) {
+      L.marker([hospitalLat, hospitalLng], { icon: circleIcon('#e8003d') }).addTo(map);
+    }
 
-      if (showRoute && hospitalLat !== null && hospitalLng !== null && donorLat !== null && donorLng !== null) {
-        var ds = new google.maps.DirectionsService();
-        var dr = new google.maps.DirectionsRenderer({
-          suppressMarkers: true,
-          polylineOptions: { strokeColor: '#e8003d', strokeWeight: 4 }
-        });
-        dr.setMap(map);
-        ds.route({
-          origin: { lat: donorLat, lng: donorLng },
-          destination: { lat: hospitalLat, lng: hospitalLng },
-          travelMode: google.maps.TravelMode.DRIVING
-        }, function(result, status) {
-          if (status === 'OK') {
-            dr.setDirections(result);
-            var leg = result.routes[0].legs[0];
-            var bounds = new google.maps.LatLngBounds();
-            bounds.extend({ lat: donorLat, lng: donorLng });
-            bounds.extend({ lat: hospitalLat, lng: hospitalLng });
-            map.fitBounds(bounds, 60);
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                distKm: (leg.distance.value / 1000).toFixed(1),
-                etaMins: Math.round(leg.duration.value / 60)
-              }));
-            }
-          } else {
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ error: status }));
-            }
-          }
-        });
-      }
+    if (donorLat !== null && donorLng !== null) {
+      L.marker([donorLat, donorLng], { icon: circleIcon('#1a6bb5') }).addTo(map);
+    }
+
+    donorMarkers.forEach(function(d) {
+      L.marker([d.lat, d.lng], { icon: initialsIcon(d.initials, '#1a6bb5') }).addTo(map);
+    });
+
+    if (donorMarkers.length > 0 && hospitalLat !== null && !showRoute) {
+      var coords = donorMarkers.map(function(d) { return [d.lat, d.lng]; });
+      coords.push([hospitalLat, hospitalLng]);
+      map.fitBounds(L.latLngBounds(coords), { padding: [60, 60] });
+    }
+
+    if (showRoute && hospitalLat !== null && donorLat !== null) {
+      fetch(
+        'https://router.project-osrm.org/route/v1/driving/' +
+        donorLng + ',' + donorLat + ';' +
+        hospitalLng + ',' + hospitalLat +
+        '?overview=full&geometries=geojson'
+      )
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.routes || !data.routes[0]) {
+          map.fitBounds([[donorLat, donorLng], [hospitalLat, hospitalLng]], { padding: [60, 60] });
+          return;
+        }
+        var route = data.routes[0];
+        L.geoJSON(route.geometry, {
+          style: { color: '#e8003d', weight: 5, opacity: 0.9 }
+        }).addTo(map);
+        var coords = route.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+        map.fitBounds(L.latLngBounds(coords), { padding: [60, 60] });
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            distKm: (route.distance / 1000).toFixed(1),
+            etaMins: Math.round(route.duration / 60)
+          }));
+        }
+      })
+      .catch(function() {
+        map.fitBounds([[donorLat, donorLng], [hospitalLat, hospitalLng]], { padding: [60, 60] });
+      });
     }
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=initMap" async defer></script>
 </body>
 </html>`;
 
