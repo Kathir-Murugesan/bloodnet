@@ -8,7 +8,7 @@ import { BNBloodBadge, BNTag, BNMap, BNAvatar, PulseDot } from '../components';
 import { BackIcon } from '../icons';
 import { supabase, BloodRequest, RequestCommitment, DonorProfile } from '../lib/supabase';
 import { formatDistance, haversineKm, timeAgo } from '../lib/distance';
-import { TOMTOM_API_KEY } from '../lib/constants';
+import { GOOGLE_MAPS_API_KEY } from '../lib/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestManage'>;
 
@@ -32,14 +32,14 @@ export function RequestManageScreen({ navigation, route }: Props) {
         .filter((c) => c.current_latitude != null && c.current_longitude != null)
         .map(async (c) => {
           try {
-            const url = `https://api.tomtom.com/routing/1/calculateRoute/${c.current_latitude},${c.current_longitude}:${hospitalLat},${hospitalLng}/json?key=${TOMTOM_API_KEY}&travelMode=car&routeType=fastest`;
+            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${c.current_latitude},${c.current_longitude}&destination=${hospitalLat},${hospitalLng}&mode=driving&key=${GOOGLE_MAPS_API_KEY}`;
             const res = await fetch(url);
             const json = await res.json();
-            const summary = json?.routes?.[0]?.summary;
-            if (summary) {
+            const leg = json?.routes?.[0]?.legs?.[0];
+            if (leg) {
               results[c.id] = {
-                distKm: (summary.lengthInMeters / 1000).toFixed(1),
-                etaMins: Math.round(summary.travelTimeInSeconds / 60),
+                distKm: (leg.distance.value / 1000).toFixed(1),
+                etaMins: Math.round(leg.duration.value / 60),
               };
             }
           } catch { /* ignore individual failures */ }
@@ -180,6 +180,11 @@ export function RequestManageScreen({ navigation, route }: Props) {
               name: c.donor?.full_name ?? 'Donor',
             }))}
         />
+        {!hospital?.latitude && (
+          <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 12, color: BN.muted, textAlign: 'center', marginTop: -8 }}>
+            Set hospital location in Admin Panel to enable live tracking map.
+          </Text>
+        )}
 
         {/* Committed donors */}
         <Text style={styles.sectionLabel}>COMMITTED DONORS</Text>

@@ -98,6 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session, loadProfile]);
 
   const signOut = useCallback(async () => {
+    setSession(null);
+    setRole(null);
+    setDonorProfile(null);
+    setHospitalProfile(null);
     await supabase.auth.signOut();
   }, []);
 

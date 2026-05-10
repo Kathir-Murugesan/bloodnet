@@ -1,1 +1,1 @@
-export const TOMTOM_API_KEY = 'apy4IVOT24PyWLcNEKSpoiMc9DKfU5Rn';
+export const GOOGLE_MAPS_API_KEY = 'AIzaSyCaxjxV0d17zYME-OR6xiLByrXJ-MFyiZ4';
