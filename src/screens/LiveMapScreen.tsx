@@ -87,8 +87,9 @@ export function LiveMapScreen({ navigation, route }: Props) {
 
   const req = (commitment as any)?.request;
   const hospital = req?.hospital;
-  const hospitalLat: number | undefined = hospital?.latitude;
-  const hospitalLng: number | undefined = hospital?.longitude;
+  const hospitalLat: number | null = hospital?.latitude ?? null;
+  const hospitalLng: number | null = hospital?.longitude ?? null;
+  const hasHospitalLocation = hospitalLat != null && hospitalLng != null;
   const donor = commitment?.donor;
   const initials = donor?.full_name
     ? donor.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -98,18 +99,26 @@ export function LiveMapScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <StatusBar style="light" />
       {/* Full-screen map */}
-      <TomTomMap
-        height={812}
-        centerLat={donorLat ?? hospitalLat ?? 19.076}
-        centerLng={donorLng ?? hospitalLng ?? 72.877}
-        hospitalLat={hospitalLat}
-        hospitalLng={hospitalLng}
-        hospitalName={hospital?.hospital_name}
-        donorLat={donorLat ?? undefined}
-        donorLng={donorLng ?? undefined}
-        showRoute={!!(donorLat && donorLng && hospitalLat && hospitalLng)}
-        onRouteInfo={setRouteInfo}
-      />
+      {hasHospitalLocation ? (
+        <TomTomMap
+          height={812}
+          centerLat={donorLat ?? hospitalLat ?? 19.076}
+          centerLng={donorLng ?? hospitalLng ?? 72.877}
+          hospitalLat={hospitalLat}
+          hospitalLng={hospitalLng}
+          hospitalName={hospital?.hospital_name}
+          donorLat={donorLat ?? undefined}
+          donorLng={donorLng ?? undefined}
+          showRoute={!!(donorLat && donorLng)}
+          onRouteInfo={setRouteInfo}
+        />
+      ) : (
+        <View style={{ flex: 1, backgroundColor: '#1a000816', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'DMSans_400Regular', fontSize: 14, textAlign: 'center', padding: 40 }}>
+            Hospital location not configured.{'\n'}Ask the admin to update the hospital's map pin.
+          </Text>
+        </View>
+      )}
 
       {/* Top info card */}
       <View style={[styles.topCard, { top: insets.top + 8 }]}>
@@ -127,13 +136,13 @@ export function LiveMapScreen({ navigation, route }: Props) {
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Distance</Text>
             <Text style={styles.statValue}>
-              {routeInfo?.distKm ? routeInfo.distKm + ' km' : '—'}
+              {!hasHospitalLocation ? '—' : routeInfo?.distKm ? routeInfo.distKm + ' km' : '—'}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>ETA</Text>
             <Text style={styles.statValue}>
-              {routeInfo?.etaMins ? routeInfo.etaMins + ' min' : 'Locating…'}
+              {!hasHospitalLocation ? '—' : routeInfo?.etaMins ? routeInfo.etaMins + ' min' : 'Locating…'}
             </Text>
           </View>
         </View>

@@ -127,6 +127,11 @@ CREATE POLICY "donor own profile"
 CREATE POLICY "hospital reads donors"
   ON donor_profiles FOR SELECT
   USING (EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'hospital'));
+-- Hospitals and system can read donor profiles for committed donations
+CREATE POLICY "Donor profiles readable for commitments"
+  ON donor_profiles FOR SELECT
+  TO authenticated
+  USING (true);
 
 -- hospital_profiles
 CREATE POLICY "hospital own profile"
@@ -134,6 +139,10 @@ CREATE POLICY "hospital own profile"
 CREATE POLICY "donor reads hospitals"
   ON hospital_profiles FOR SELECT
   USING (auth.uid() IS NOT NULL);
+-- Anyone can read hospital profiles (needed for donor app and admin panel)
+CREATE POLICY "Hospital profiles public read"
+  ON hospital_profiles FOR SELECT
+  USING (true);
 
 -- blood_requests
 CREATE POLICY "hospital manages requests"

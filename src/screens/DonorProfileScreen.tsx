@@ -51,7 +51,10 @@ export function DonorProfileScreen({ navigation }: Props) {
   const handleSignOut = useCallback(async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: signOut },
+      { text: 'Log Out', style: 'destructive', onPress: async () => {
+          await signOut();
+          navigation.reset({ index: 0, routes: [{ name: 'Splash' }] });
+        } },
     ]);
   }, [signOut]);
 
