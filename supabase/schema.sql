@@ -143,6 +143,14 @@ CREATE POLICY "donor reads hospitals"
 CREATE POLICY "Hospital profiles public read"
   ON hospital_profiles FOR SELECT
   USING (true);
+-- Admin panel uses anon/hospital session to manage all profiles
+CREATE POLICY "admin can update hospital profiles"
+  ON hospital_profiles FOR UPDATE
+  USING (true)
+  WITH CHECK (true);
+CREATE POLICY "admin can delete hospital profiles"
+  ON hospital_profiles FOR DELETE
+  USING (true);
 
 -- blood_requests
 CREATE POLICY "hospital manages requests"

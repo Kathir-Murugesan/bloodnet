@@ -17,11 +17,31 @@ function buildMapPickerHtml(lat: number, lng: number): string {
 <html>
 <head>
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-  <style>* { margin: 0; padding: 0; } #map { width: 100%; height: 100vh; } #hint { position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.65);color:#fff;padding:6px 14px;border-radius:20px;font-size:13px;font-family:sans-serif;pointer-events:none; }</style>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    #map { width: 100%; height: 100vh; }
+    #search-wrap {
+      position: fixed; top: 10px; left: 10px; right: 10px; z-index: 1000;
+    }
+    #search-input {
+      width: 100%; padding: 11px 14px; border-radius: 10px; border: none;
+      font-size: 14px; font-family: sans-serif;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35); outline: none;
+    }
+    #hint {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.65); color: #fff; padding: 6px 14px;
+      border-radius: 20px; font-size: 13px; font-family: sans-serif;
+      pointer-events: none; white-space: nowrap;
+    }
+  </style>
 </head>
 <body>
+  <div id="search-wrap">
+    <input id="search-input" type="text" placeholder="Search hospital name or address…" />
+  </div>
   <div id="map"></div>
-  <div id="hint">Tap anywhere to place hospital pin</div>
+  <div id="hint">Search above or tap map to place pin</div>
   <script>
     var map, marker;
     function initMap() {
@@ -29,9 +49,28 @@ function buildMapPickerHtml(lat: number, lng: number): string {
         center: { lat: ${lat}, lng: ${lng} },
         zoom: 12,
         disableDefaultUI: true,
-        zoomControl: true
+        zoomControl: true,
+        gestureHandling: 'greedy'
       });
       marker = new google.maps.Marker({ map: null, draggable: true });
+      var autocomplete = new google.maps.places.Autocomplete(
+        document.getElementById('search-input'),
+        { types: ['establishment', 'geocode'] }
+      );
+      autocomplete.bindTo('bounds', map);
+      autocomplete.addListener('place_changed', function() {
+        var place = autocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) return;
+        map.setCenter(place.geometry.location);
+        map.setZoom(16);
+        marker.setPosition(place.geometry.location);
+        marker.setMap(map);
+        document.getElementById('hint').style.display = 'none';
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng()
+        }));
+      });
       marker.addListener('dragend', function() {
         var pos = marker.getPosition();
         window.ReactNativeWebView.postMessage(JSON.stringify({ lat: pos.lat(), lng: pos.lng() }));
@@ -44,7 +83,7 @@ function buildMapPickerHtml(lat: number, lng: number): string {
       });
     }
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCaxjxV0d17zYME-OR6xiLByrXJ-MFyiZ4&callback=initMap" async defer></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCaxjxV0d17zYME-OR6xiLByrXJ-MFyiZ4&libraries=places&callback=initMap" async defer></script>
 </body>
 </html>`;
 }
@@ -114,6 +153,8 @@ export function AdminPanelScreen({ navigation }: Props) {
       Alert.alert('Success', `Hospital "${hospName}" created.\nUsername: ${hospUsername}\nPassword: ${hospPassword}`);
       setShowCreate(false);
       const userId = data.user!.id;
+      // Wait for DB trigger to create the hospital_profiles row before updating it
+      await new Promise(resolve => setTimeout(resolve, 1200));
       if (hospLat !== null && hospLng !== null) {
         await supabaseAdmin.from('hospital_profiles').update({
           latitude: hospLat,
@@ -121,7 +162,6 @@ export function AdminPanelScreen({ navigation }: Props) {
         }).eq('id', userId);
       }
       setHospName(''); setHospUsername(''); setHospPassword(''); setHospLat(null); setHospLng(null);
-      await new Promise(resolve => setTimeout(resolve, 800));
       fetchHospitals();
     } finally {
       setCreating(false);
@@ -139,11 +179,15 @@ export function AdminPanelScreen({ navigation }: Props) {
   async function handleSaveLocation() {
     if (!selectedHospital || editLat === null || editLng === null) return;
     setSaving(true);
-    await supabaseAdmin.from('hospital_profiles').update({
+    const { error } = await supabaseAdmin.from('hospital_profiles').update({
       latitude: editLat,
       longitude: editLng,
     }).eq('id', selectedHospital.id);
     setSaving(false);
+    if (error) {
+      Alert.alert('Save Failed', error.message);
+      return;
+    }
     setShowEditMap(false);
     setSelectedHospital(null);
     fetchHospitals();
